@@ -15,6 +15,19 @@ class Pycord:
         self.user_agent = user_agent or f'Pycord (github.com/Celeo/Pycord, {Pycord.version})'
         self.__setup_logger()
 
+    def connect(self):
+        # TODO
+        pass
+
+    def disconnect(self):
+        # TODO
+        pass
+
+    @property
+    def connected(self):
+        # TODO
+        return False
+
     def __setup_logger(self):
         self.logger = logging.getLogger('discord')
         self.logger.setLevel(logging.DEBUG)
@@ -69,4 +82,6 @@ class Pycord:
         return self.__get(f'channels/{id}')
 
     def send_message(self, id: str, message: str):
-        return self.__post(f'channels/{id}/messages', {'content': message})
+        if self.connected:
+            return self.__post(f'channels/{id}/messages', {'content': message})
+        raise ValueError('Websocket not connected')
