@@ -6,7 +6,7 @@ with open('pycord/__init__.py') as f:
     version = re.search(r'(\d+\.\d+\.\d+)', f.read()).group(1)
 
 setup(
-    name='Pycord',
+    name='PycordLib',
     author='Matt Boulanger',
     author_email='celeodor@gmail.com',
     version=version,

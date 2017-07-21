@@ -4,3 +4,6 @@ __pycache__
 .cache
 env
 *.log
+build
+dist
+PycordLib.egg-info

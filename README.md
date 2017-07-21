@@ -4,12 +4,16 @@ Super simple Discord API layer. If you want something full-featured, this isn't 
 
 This library is suitable for simple bots that allow users to send commands.
 
-## Installation
+## Installation for development
 
 1. Clone from GitHub
 2. Setup virtual environment: `virtualenv env -p python3.6`
 3. Activate: `source env/bin/activate`
 4. Install libraries: `pip install -r requirements.txt`
+
+## Installation for use
+
+1. Use pip: `pip install pycordlib`
 
 ## Making a bot
 
