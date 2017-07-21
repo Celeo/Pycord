@@ -231,7 +231,7 @@ class Pycord:
             raise ValueError('Websocket not connected')
         return self.__post(f'channels/{id}/messages', {'content': message})
 
-    def decorate_command(self, name: str) -> Callable:
+    def command(self, name: str) -> Callable:
         def inner(f: Callable):
             self._commands.append((name, f))
         return inner
