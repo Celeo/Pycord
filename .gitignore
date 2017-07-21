@@ -1,8 +1,9 @@
+env
 *.pyc
 __pycache__
 .mypy_cache
 .cache
-env
+.coverage
 *.log
 build
 dist

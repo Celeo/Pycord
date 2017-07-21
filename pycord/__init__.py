@@ -17,7 +17,7 @@ __all__ = ['Pycord']
 __author__ = 'Matt "Celeo" Boulanger'
 __email__ = 'celeodor@gmail.com'
 __license__ = 'MIT'
-__version__ = '1.0.0'
+__version__ = '1.0.1'
 
 
 class WebSocketEvent(enum.Enum):
@@ -155,6 +155,7 @@ class Pycord:
             log_to_console: whether or not to log to the console
         """
         self.logger = logging.getLogger('discord')
+        self.logger.handlers = []
         self.logger.setLevel(logging_level)
         formatter = logging.Formatter(style='{', fmt='{asctime} [{levelname}] {message}', datefmt='%Y-%m-%d %H:%M:%S')
         file_handler = logging.FileHandler('pycord.log')
@@ -171,7 +172,7 @@ class Pycord:
     # REST API
     # =====================
 
-    def __build_headers(self) -> Dict[str, str]:
+    def _build_headers(self) -> Dict[str, str]:
         """Creates the headers required for HTTP requests
 
         Args:
@@ -186,7 +187,7 @@ class Pycord:
             'Content-Type': 'application/json'
         }
 
-    def __get(self, path: str) -> Dict[str, Any]:
+    def _get(self, path: str) -> Dict[str, Any]:
         """Makes an HTTP GET request to the Discord REST API
 
         Args:
@@ -198,13 +199,13 @@ class Pycord:
         """
         url = Pycord.url_base + path
         self.logger.debug(f'Making GET request to "{url}"')
-        r = requests.get(url, headers=self.__build_headers())
+        r = requests.get(url, headers=self._build_headers())
         self.logger.debug(f'GET response from "{url}" was "{r.status_code}"')
         if r.status_code != 200:
             raise ValueError(f'Non-200 GET response from Discord API ({r.status_code}): {r.text}')
         return r.json()
 
-    def __post(self, path: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    def _post(self, path: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Makes an HTTP POST request to the Discord REST API
 
         Args:
@@ -217,7 +218,7 @@ class Pycord:
         """
         url = Pycord.url_base + path
         self.logger.debug(f'Making POST request to "{url}"')
-        r = requests.post(url, headers=self.__build_headers(), json=data)
+        r = requests.post(url, headers=self._build_headers(), json=data)
         self.logger.debug(f'POST response from "{url}" was "{r.status_code}"')
         if r.status_code != 200:
             raise ValueError(f'Non-200 POST response from Discord API ({r.status_code}): {r.text}')
@@ -232,7 +233,7 @@ class Pycord:
         Returns:
             The URL of websocket connection
         """
-        return self.__get('gateway')['url']
+        return self._get('gateway')['url']
 
     # =====================
     # Websocket API
@@ -269,8 +270,8 @@ class Pycord:
         if event == WebSocketEvent.HELLO:
             interval = float(data['d']['heartbeat_interval']) / 1000
             self.logger.debug(f'Starting heartbeat thread at {interval} seconds')
-            self.__ws_keep_alive = WebSocketKeepAlive(self.logger, ws, interval)
-            self.__ws_keep_alive.start()
+            self._ws_keep_alive = WebSocketKeepAlive(self.logger, ws, interval)
+            self._ws_keep_alive.start()
         elif event == WebSocketEvent.DISPATCH:
             self.logger.debug('Got dispatch ' + data['t'])
             if data['t'] == 'MESSAGE_CREATE':
@@ -351,8 +352,8 @@ class Pycord:
             on_close=self._ws_on_close
         )
         ws.on_open = self._ws_on_open
-        self.__ws_run_forever_wrapper = WebSocketRunForeverWrapper(ws)
-        self.__ws_run_forever_wrapper.start()
+        self._ws_run_forever_wrapper = WebSocketRunForeverWrapper(ws)
+        self._ws_run_forever_wrapper.start()
 
     def keep_running(self):
         """Call this method to block on the maintenance of the websocket connection.
@@ -365,7 +366,7 @@ class Pycord:
         Args:
             None
         """
-        self.__ws_run_forever_wrapper.join()
+        self._ws_run_forever_wrapper.join()
 
     def get_basic_bot_info(self) -> Dict[str, Any]:
         """Gets bot info (REST query)
@@ -387,7 +388,7 @@ class Pycord:
                     "email": "nelly@discordapp.com"
                 }
         """
-        return self.__get('users/@me')
+        return self._get('users/@me')
 
     def get_connected_guilds(self) -> Dict[str, Any]:
         """Get connected guilds (REST query)
@@ -439,7 +440,7 @@ class Pycord:
                     }
                 ]
         """
-        return self.__get('users/@me/guilds')
+        return self._get('users/@me/guilds')
 
     def get_guild_info(self, id: str) -> Dict[str, Any]:
         """Get a guild's information by its id
@@ -469,7 +470,7 @@ class Pycord:
                     "unavailable": false
                 }
         """
-        return self.__get(f'guilds/{id}')
+        return self._get(f'guilds/{id}')
 
     def get_channels_in(self, guild_id: str) -> Dict[str, Any]:
         """Get a list of channels in the guild
@@ -520,7 +521,7 @@ class Pycord:
                     }
                 ]
         """
-        return self.__get(f'guilds/{guild_id}/channels')
+        return self._get(f'guilds/{guild_id}/channels')
 
     def get_channel_info(self, id: str) -> Dict[str, Any]:
         """Get a chanel's information by its id
@@ -543,7 +544,7 @@ class Pycord:
                     "last_message_id": "155117677105512449"
                 }
         """
-        return self.__get(f'channels/{id}')
+        return self._get(f'channels/{id}')
 
     def send_message(self, id: str, message: str) -> Dict[str, Any]:
         """Send a message to a channel
@@ -560,7 +561,7 @@ class Pycord:
         """
         if not self.connected:
             raise ValueError('Websocket not connected')
-        return self.__post(f'channels/{id}/messages', {'content': message})
+        return self._post(f'channels/{id}/messages', {'content': message})
 
     def command(self, name: str) -> Callable:
         """Decorator to wrap methods to register them as commands
