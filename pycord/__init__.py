@@ -810,35 +810,31 @@ class Pycord:
 
         Example:
             {
-                "reactions": [
-                    {
-                        "count": 1,
-                        "me": false,
-                        "emoji": {
-                            "id": null,
-                            "name": "🔥"
-                        }
-                    }
-                ],
-                "attachments": [],
-                "tts": false,
-                "embeds": [],
-                "timestamp": "2017-07-11T17:27:07.299000+00:00",
-                "mention_everyone": false,
-                "id": "334385199974967042",
-                "pinned": false,
-                "edited_timestamp": null,
-                "author": {
-                    "username": "Mason",
-                    "discriminator": "9999",
-                    "id": "53908099506183680",
-                    "avatar": "a_bab14f271d565501444b2ca3be944b25"
-                },
-                "mention_roles": [],
-                "content": "Supa Hot",
-                "channel_id": "290926798999357250",
-                "mentions": [],
-                "type": 0
+                "t": "MESSAGE_CREATE",
+                "s": 4,
+                "op": 0,
+                "d": {
+                    "type": 0,
+                    "tts": false,
+                    "timestamp": "2017-07-22T04:46:41.366000+00:00",
+                    "pinned": false,
+                    "nonce": "338180052904574976",
+                    "mentions": [],
+                    "mention_roles": [],
+                    "mention_everyone": false,
+                    "id": "338180026363150336",
+                    "embeds": [],
+                    "edited_timestamp": null,
+                    "content": "!source",
+                    "channel_id": "151106790233210882",
+                    "author": {
+                        "username": "Celeo",
+                        "id": "110245175636312064",
+                        "discriminator": "1453",
+                        "avatar": "3118c26ea7e40350212196e1d9d7f5c9"
+                    },
+                    "attachments": []
+                }
             }
 
         Args:
