@@ -5,7 +5,7 @@ import zlib
 import threading
 import time
 import enum
-from typing import Dict, Any, Union, Callable
+from typing import List, Dict, Any, Union, Callable
 
 import requests
 import websocket
@@ -17,7 +17,7 @@ __all__ = ['Pycord']
 __author__ = 'Matt "Celeo" Boulanger'
 __email__ = 'celeodor@gmail.com'
 __license__ = 'MIT'
-__version__ = '1.0.1'
+__version__ = '1.2.0'
 
 
 class WebSocketEvent(enum.Enum):
@@ -187,42 +187,38 @@ class Pycord:
             'Content-Type': 'application/json'
         }
 
-    def _get(self, path: str) -> Dict[str, Any]:
-        """Makes an HTTP GET request to the Discord REST API
+    def _query(self, path: str, method: str, data: Dict[str, Any]=None, expected_status: int = 200) \
+            -> Union[List[Dict[str, Any]], Dict[str, Any], None]:
+        """Make an HTTP request
 
         Args:
-            path: the URI path (not including the base url, start with the first
-                uri segment, like 'users/...')
-
-        Returns:
-            Dictionary from the JSON response
-        """
-        url = Pycord.url_base + path
-        self.logger.debug(f'Making GET request to "{url}"')
-        r = requests.get(url, headers=self._build_headers())
-        self.logger.debug(f'GET response from "{url}" was "{r.status_code}"')
-        if r.status_code != 200:
-            raise ValueError(f'Non-200 GET response from Discord API ({r.status_code}): {r.text}')
-        return r.json()
-
-    def _post(self, path: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Makes an HTTP POST request to the Discord REST API
-
-        Args:
-            path: the URI path (not including the base url, start with the first
-                uri segment, like 'users/...')
+            path: the URI path (not including the base url, start with
+                the first uri segment, like 'users/...')
+            method: the HTTP method to use (GET, POST, PATCH, ...)
             data: the data to send as JSON data
+            expected_status: expected HTTP status; other statuses
+                received will raise an Exception
 
         Returns:
-            Dictionary from the JSON response
+            Data from the endpoint's response
         """
         url = Pycord.url_base + path
-        self.logger.debug(f'Making POST request to "{url}"')
-        r = requests.post(url, headers=self._build_headers(), json=data)
-        self.logger.debug(f'POST response from "{url}" was "{r.status_code}"')
-        if r.status_code != 200:
-            raise ValueError(f'Non-200 POST response from Discord API ({r.status_code}): {r.text}')
-        return r.json()
+        self.logger.debug(f'Making {method} request to "{url}"')
+        if method == 'GET':
+            r = requests.get(url, headers=self._build_headers())
+        elif method == 'POST':
+            r = requests.post(url, headers=self._build_headers(), json=data)
+            r = requests.get(url, headers=self._build_headers())
+        elif method == 'PATCH':
+            r = requests.patch(url, headers=self._build_headers(), json=data)
+        else:
+            raise ValueError(f'Unknown HTTP method {method}')
+        self.logger.debug(f'{method} response from "{url}" was "{r.status_code}"')
+        if r.status_code != expected_status:
+            raise ValueError(f'Non-{expected_status} {method} response from Discord API ({r.status_code}): {r.text}')
+        if expected_status == 200:
+            return r.json()
+        return None
 
     def _get_websocket_address(self) -> str:
         """Queries the Discord REST API for the websocket URL
@@ -233,13 +229,13 @@ class Pycord:
         Returns:
             The URL of websocket connection
         """
-        return self._get('gateway')['url']
+        return self._query('gateway', 'GET')['url']
 
     # =====================
     # Websocket API
     # =====================
 
-    def _ws_on_message(self, ws: websocket.WebSocketApp, message: Union[str, bytes]):
+    def _ws_on_message(self, ws: websocket.WebSocketApp, raw: Union[str, bytes]):
         """Callback for receiving messages from the websocket connection
 
         This method receives ALL events from the websocket connection, some of which
@@ -252,11 +248,11 @@ class Pycord:
 
         Args:
             ws: websocket connection
-            message: message received from the connection; either string or bytes, the latter
+            raw: message received from the connection; either string or bytes, the latter
                 is a zlip-compressed string. Either way, the end result of formatting is JSON
         """
-        if isinstance(message, bytes):
-            message = zlib.decompress(message, 15, 10490000).decode('utf-8')
+        if isinstance(raw, bytes):
+            message = zlib.decompress(raw, 15, 10490000).decode('utf-8')
         data = json.loads(message)
         if data.get('s') is not None:
             global last_sequence
@@ -334,6 +330,10 @@ class Pycord:
     # Public methods
     # =================================================
 
+    # =====================
+    # Websocket API
+    # =====================
+
     def connect_to_websocket(self):
         """Call this method to make the connection to the Discord websocket
 
@@ -345,14 +345,14 @@ class Pycord:
         Args:
             None
         """
-        ws = websocket.WebSocketApp(
-            self._get_websocket_address() + '?v=5&encoding=json',
+        self._ws = websocket.WebSocketApp(
+            self._get_websocket_address() + '?v=6&encoding=json',
             on_message=self._ws_on_message,
             on_error=self._ws_on_error,
             on_close=self._ws_on_close
         )
-        ws.on_open = self._ws_on_open
-        self._ws_run_forever_wrapper = WebSocketRunForeverWrapper(ws)
+        self._ws.on_open = self._ws_on_open
+        self._ws_run_forever_wrapper = WebSocketRunForeverWrapper(self._ws)
         self._ws_run_forever_wrapper.start()
 
     def keep_running(self):
@@ -367,6 +367,41 @@ class Pycord:
             None
         """
         self._ws_run_forever_wrapper.join()
+
+    def set_status(self, name: str = None):
+        """Updates the bot's status
+
+        This is used to get the game that the bot is "playing" or to clear it.
+        If you want to set a game, pass a name; if you want to clear it, either
+        call this method without the optional ``name`` parameter or explicitly
+        pass ``None``.
+
+        Args:
+            name: the game's name, or None
+        """
+        game = None
+        if name:
+            game = {
+                'name': name,
+                'type': 0,
+                'url': None
+            }
+        payload = {
+            'op': WebSocketEvent.STATUS_UPDATE.value,
+            'd': {
+                'game': game,
+                'status': 'online',
+                'afk': False,
+                'since': 0
+            }
+        }
+        data = json.dumps(payload, indent=2)
+        self.logger.debug(f'Sending status update payload: {data}')
+        self._ws.send(json.dumps(data))
+
+    # =====================
+    # REST API
+    # =====================
 
     def get_basic_bot_info(self) -> Dict[str, Any]:
         """Gets bot info (REST query)
@@ -388,7 +423,7 @@ class Pycord:
                     "email": "nelly@discordapp.com"
                 }
         """
-        return self._get('users/@me')
+        return self._query('users/@me', 'GET')
 
     def get_connected_guilds(self) -> Dict[str, Any]:
         """Get connected guilds (REST query)
@@ -440,7 +475,7 @@ class Pycord:
                     }
                 ]
         """
-        return self._get('users/@me/guilds')
+        return self._query('users/@me/guilds', 'GET')
 
     def get_guild_info(self, id: str) -> Dict[str, Any]:
         """Get a guild's information by its id
@@ -470,9 +505,9 @@ class Pycord:
                     "unavailable": false
                 }
         """
-        return self._get(f'guilds/{id}')
+        return self._query(f'guilds/{id}', 'GET')
 
-    def get_channels_in(self, guild_id: str) -> Dict[str, Any]:
+    def get_channels_in(self, guild_id: str) -> List[Dict[str, Any]]:
         """Get a list of channels in the guild
 
         Args:
@@ -521,7 +556,7 @@ class Pycord:
                     }
                 ]
         """
-        return self._get(f'guilds/{guild_id}/channels')
+        return self._query(f'guilds/{guild_id}/channels', 'GET')
 
     def get_channel_info(self, id: str) -> Dict[str, Any]:
         """Get a chanel's information by its id
@@ -544,7 +579,199 @@ class Pycord:
                     "last_message_id": "155117677105512449"
                 }
         """
-        return self._get(f'channels/{id}')
+        return self._query(f'channels/{id}', 'GET')
+
+    def get_guild_members(self, guild_id: int) -> List[Dict[str, Any]]:
+        """Get a list of members in the guild
+
+        Args:
+            guild_id: snowflake id of the guild
+
+        Returns:
+            List of dictionary objects of users in the guild.
+
+            Example:
+                [
+                    {
+                        "id": "41771983423143937",
+                        "name": "Discord Developers",
+                        "icon": "SEkgTU9NIElUUyBBTkRSRUkhISEhISEh",
+                        "splash": null,
+                        "owner_id": "80351110224678912",
+                        "region": "us-east",
+                        "afk_channel_id": "42072017402331136",
+                        "afk_timeout": 300,
+                        "embed_enabled": true,
+                        "embed_channel_id": "41771983444115456",
+                        "verification_level": 1,
+                        "roles": [],
+                        "emojis": [],
+                        "features": ["INVITE_SPLASH"],
+                        "unavailable": false
+                    },
+                    {
+                        "id": "41771983423143937",
+                        "name": "Discord Developers",
+                        "icon": "SEkgTU9NIElUUyBBTkRSRUkhISEhISEh",
+                        "splash": null,
+                        "owner_id": "80351110224678912",
+                        "region": "us-east",
+                        "afk_channel_id": "42072017402331136",
+                        "afk_timeout": 300,
+                        "embed_enabled": true,
+                        "embed_channel_id": "41771983444115456",
+                        "verification_level": 1,
+                        "roles": [],
+                        "emojis": [],
+                        "features": ["INVITE_SPLASH"],
+                        "unavailable": false
+                    }
+                ]
+        """
+        return self._query(f'guilds/{guild_id}/members', 'GET')
+
+    def get_guild_member_by_id(self, guild_id: int, member_id: int) -> Dict[str, Any]:
+        """Get a guild member by their id
+
+        Args:
+            guild_id: snowflake id of the guild
+            member_id: snowflake id of the member
+
+        Returns:
+            Dictionary data for the guild member.
+
+            Example:
+                {
+                    "id": "41771983423143937",
+                    "name": "Discord Developers",
+                    "icon": "SEkgTU9NIElUUyBBTkRSRUkhISEhISEh",
+                    "splash": null,
+                    "owner_id": "80351110224678912",
+                    "region": "us-east",
+                    "afk_channel_id": "42072017402331136",
+                    "afk_timeout": 300,
+                    "embed_enabled": true,
+                    "embed_channel_id": "41771983444115456",
+                    "verification_level": 1,
+                    "roles": [
+                        "41771983423143936",
+                        "41771983423143937",
+                        "41771983423143938"
+                    ],
+                    "emojis": [],
+                    "features": ["INVITE_SPLASH"],
+                    "unavailable": false
+                }
+        """
+        return self._query(f'guilds/{guild_id}/members/{member_id}', 'GET')
+
+    def get_all_guild_roles(self, guild_id: int) -> List[Dict[str, Any]]:
+        """Gets all the roles for the specified guild
+
+        Args:
+            guild_id: snowflake id of the guild
+
+        Returns:
+            List of dictionary objects of roles in the guild.
+
+            Example:
+                [
+                    {
+                        "id": "41771983423143936",
+                        "name": "WE DEM BOYZZ!!!!!!",
+                        "color": 3447003,
+                        "hoist": true,
+                        "position": 1,
+                        "permissions": 66321471,
+                        "managed": false,
+                        "mentionable": false
+                    },
+                    {
+                        "hoist": false,
+                        "name": "Admin",
+                        "mentionable": false,
+                        "color": 15158332,
+                        "position": 2,
+                        "id": "151107620239966208",
+                        "managed": false,
+                        "permissions": 66583679
+                      },
+                      {
+                        "hoist": false,
+                        "name": "@everyone",
+                        "mentionable": false,
+                        "color": 0,
+                        "position": 0,
+                        "id": "151106790233210882",
+                        "managed": false,
+                        "permissions": 37215297
+                      }
+                ]
+        """
+        return self._query(f'guilds/{guild_id}/roles', 'GET')
+
+    def set_member_roles(self, guild_id: int, member_id: int, roles: List[int]):
+        """Set the member's roles
+
+        This method takes a list of **role ids** that you want the user to have. This
+        method will **overwrite** all of the user's current roles with the roles in
+        the passed list of roles.
+
+        When calling this method, be sure that the list of roles that you're setting
+        for this user is complete, not just the roles that you want to add or remove.
+        For assistance in just adding or just removing roles, set the ``add_member_roles``
+        and ``remove_member_roles`` methods.
+
+        Args:
+            guild_id: snowflake id of the guild
+            member_id: snowflake id of the member
+            roles: list of snowflake ids of roles to set
+        """
+        self._query(f'guilds/{guild_id}/members/{member_id}', 'PATCH', {'roles': roles}, expected_status=204)
+
+    def add_member_roles(self, guild_id: int, member_id: int, roles: List[int]):
+        """Add roles to a member
+
+        This method takes a list of **role ids** that you want to give to the user,
+        on top of whatever roles they may already have. This method will fetch
+        the user's current roles, and add to that list the roles passed in. The
+        user's resulting list of roles will not contain duplicates, so you don't have
+        to filter role ids to this method (as long as they're still roles for this guild).
+
+        This method differs from ``set_member_roles`` in that this method ADDS roles
+        to the user's current role list. ``set_member_roles`` is used by this method.
+
+        Args:
+            guild_id: snowflake id of the guild
+            member_id: snowflake id of the member
+            roles: list of snowflake ids of roles to add
+        """
+        current_roles = [role for role in self.get_guild_member_by_id(guild_id, member_id)['roles']]
+        roles.extend(current_roles)
+        new_list = list(set(roles))
+        self.set_member_roles(guild_id, member_id, new_list)
+
+    def remove_member_roles(self, guild_id: int, member_id: int, roles: List[int]):
+        """Add roles to a member
+
+        This method takes a list of **role ids** that you want to strip from the user,
+        subtracting from whatever roles they may already have. This method will fetch
+        the user's current roles, and add to that list the roles passed in. This method
+        will only remove roles from the user that they have at the time of execution,
+        so you don't need to check that the user has the roles you're trying to remove
+        from them (as long as those roles are valid roles for this guild).
+
+        This method differs from ``set_member_roles`` in that this method REMOVES roles
+        from the user's current role list. ``set_member_roles`` is used by this method.
+
+        Args:
+            guild_id: snowflake id of the guild
+            member_id: snowflake id of the member
+            roles: list of snowflake ids of roles to remove
+        """
+        current_roles = [role for role in self.get_guild_member_by_id(guild_id, member_id)['roles']]
+        new_list = [role for role in current_roles if role not in roles]
+        self.set_member_roles(guild_id, member_id, new_list)
 
     def send_message(self, id: str, message: str) -> Dict[str, Any]:
         """Send a message to a channel
@@ -561,8 +788,11 @@ class Pycord:
         """
         if not self.connected:
             raise ValueError('Websocket not connected')
-        return self._post(f'channels/{id}/messages', {'content': message})
+        return self._query(f'channels/{id}/messages', 'POST', {'content': message})
 
+    # =====================
+    # Client command API
+    # =====================
     def command(self, name: str) -> Callable:
         """Decorator to wrap methods to register them as commands
 
