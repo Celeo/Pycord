@@ -17,7 +17,7 @@ __all__ = ['Pycord']
 __author__ = 'Matt "Celeo" Boulanger'
 __email__ = 'celeodor@gmail.com'
 __license__ = 'MIT'
-__version__ = '1.2.0'
+__version__ = '1.2.1'
 
 
 class WebSocketEvent(enum.Enum):
@@ -253,6 +253,8 @@ class Pycord:
         """
         if isinstance(raw, bytes):
             message = zlib.decompress(raw, 15, 10490000).decode('utf-8')
+        else:
+            message = raw
         data = json.loads(message)
         if data.get('s') is not None:
             global last_sequence
