@@ -252,10 +252,10 @@ class Pycord:
                 is a zlip-compressed string. Either way, the end result of formatting is JSON
         """
         if isinstance(raw, bytes):
-            message = zlib.decompress(raw, 15, 10490000).decode('utf-8')
+            decoded = zlib.decompress(raw, 15, 10490000).decode('utf-8')
         else:
-            message = raw
-        data = json.loads(message)
+            decoded = raw
+        data = json.loads(decoded)
         if data.get('s') is not None:
             global last_sequence
             last_sequence = str(data['s'])
@@ -273,9 +273,9 @@ class Pycord:
         elif event == WebSocketEvent.DISPATCH:
             self.logger.debug('Got dispatch ' + data['t'])
             if data['t'] == 'MESSAGE_CREATE':
-                message = data['d']['content']
-                if message.startswith('!') and self._commands:
-                    cmd_str = message[1:].split(' ')[0].lower()
+                message_content = data['d']['content']
+                if message_content.startswith('!') and self._commands:
+                    cmd_str = message_content[1:].split(' ')[0].lower()
                     self.logger.debug(f'Got new message, checking for callback for command "{cmd_str}"')
                     for command_obj in self._commands:
                         if command_obj[0].lower() == cmd_str:
