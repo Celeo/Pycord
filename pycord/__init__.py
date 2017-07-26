@@ -17,7 +17,7 @@ __all__ = ['Pycord']
 __author__ = 'Matt "Celeo" Boulanger'
 __email__ = 'celeodor@gmail.com'
 __license__ = 'MIT'
-__version__ = '1.2.1'
+__version__ = '1.2.2'
 
 
 class WebSocketEvent(enum.Enum):
@@ -124,7 +124,8 @@ class Pycord:
 
     url_base = 'https://discordapp.com/api/'
 
-    def __init__(self, token: str, user_agent: str=None, logging_level: int=logging.DEBUG, log_to_console: bool=True) -> None:
+    def __init__(self, token: str, user_agent: str=None, logging_level: int=logging.DEBUG,
+            log_to_console: bool=True, command_prefix: str='!') -> None:
         """Class init method
 
         Only sets up the class, does not start the websocket connection. For that, you'll need to
@@ -136,11 +137,13 @@ class Pycord:
                 https://discordapp.com/developers/docs/reference for more information
             logging_level: the desired logging level for the internal logger
             log_to_console: whether or not to log to the console as well as the file
+            command_prefix: the prefix to use when parsing commands (default is '!')
         """
         self.token = token
         self.user_agent = user_agent or f'Pycord (github.com/Celeo/Pycord, {__version__})'
         self._setup_logger(logging_level, log_to_console)
         self.connected = False
+        self.command_prefix = command_prefix
         self._commands = []
 
     # =================================================
@@ -274,7 +277,7 @@ class Pycord:
             self.logger.debug('Got dispatch ' + data['t'])
             if data['t'] == 'MESSAGE_CREATE':
                 message_content = data['d']['content']
-                if message_content.startswith('!') and self._commands:
+                if message_content.startswith(self.command_prefix) and self._commands:
                     cmd_str = message_content[1:].split(' ')[0].lower()
                     self.logger.debug(f'Got new message, checking for callback for command "{cmd_str}"')
                     for command_obj in self._commands:
