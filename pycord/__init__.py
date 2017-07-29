@@ -66,6 +66,8 @@ class WebSocketKeepAlive(threading.Thread):
         interval: the set heartbeat interval
     """
 
+    TICK_INTERVAL = 0.25
+
     def __init__(self, logger: logging.Logger, ws: websocket.WebSocketApp, interval: float) -> None:
         super().__init__(name='Thread-ws_keep_alive')
         self.logger = logger
@@ -95,7 +97,10 @@ class WebSocketKeepAlive(threading.Thread):
             except Exception as e:
                 self.logger.error(f'Got error in heartbeat: {str(e)}')
             finally:
-                time.sleep(self.interval)
+                elapsed = 0.0
+                while elapsed < self.interval and self.should_run:
+                    time.sleep(self.TICK_INTERVAL)
+                    elapsed += self.TICK_INTERVAL
 
 
 class WebSocketRunForeverWrapper(threading.Thread):
@@ -308,7 +313,7 @@ class Pycord:
         """
         self.connected = False
         self.logger.error('Websocket closed')
-        self.disconnect_from_websocket()
+        self._reconnect_websocket()
 
     def _ws_on_open(self, ws: websocket.WebSocketApp):
         """Callback for sending the initial authentication data
@@ -357,15 +362,12 @@ class Pycord:
         Args:
             None
         """
+        self.logger.info('Making websocket connection')
         try:
             if hasattr(self, '_ws'):
                 self._ws.close()
         except:
             self.logger.debug('Couldn\'t terminate previous websocket connection')
-
-        # TODO remove
-        websocket.enableTrace(True)
-
         self._ws = websocket.WebSocketApp(
             self._get_websocket_address() + '?v=6&encoding=json',
             on_message=self._ws_on_message,
@@ -389,12 +391,23 @@ class Pycord:
         """
         self._ws_run_forever_wrapper.join()
 
+    def _reconnect_websocket(self):
+        """Reconnects to the Discord Gateway websocket
+
+        Args:
+            None
+        """
+        self.logger.info('Running websocket reconnection proceedure')
+        self.disconnect_from_websocket()
+        self.connect_to_websocket()
+
     def disconnect_from_websocket(self):
         """Disconnects from the websocket
 
         Args:
             None
         """
+        self.logger.warning('Disconnecting from websocket')
         self.logger.info('Stopping keep alive thread')
         self._ws_keep_alive.stop()
         self._ws_keep_alive.join()
