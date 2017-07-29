@@ -420,22 +420,20 @@ class Pycord:
         game = None
         if name:
             game = {
-                'name': name,
-                'type': None,
-                'url': None
+                'name': name
             }
         payload = {
             'op': WebSocketEvent.STATUS_UPDATE.value,
             'd': {
                 'game': game,
-                'status': None,
+                'status': 'online',
                 'afk': False,
                 'since': 0.0
             }
         }
         data = json.dumps(payload, indent=2)
         self.logger.debug(f'Sending status update payload: {data}')
-        self._ws.send(json.dumps(data))
+        self._ws.send(data)
 
     # =====================
     # REST API
