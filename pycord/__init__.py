@@ -17,7 +17,7 @@ __all__ = ['Pycord']
 __author__ = 'Matt "Celeo" Boulanger'
 __email__ = 'celeodor@gmail.com'
 __license__ = 'MIT'
-__version__ = '1.2.4'
+__version__ = '1.3.0'
 
 
 class WebSocketEvent(enum.Enum):
