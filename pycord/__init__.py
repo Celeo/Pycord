@@ -71,6 +71,10 @@ class WebSocketKeepAlive(threading.Thread):
         self.logger = logger
         self.ws = ws
         self.interval = interval
+        self.should_run = True
+
+    def stop(self):
+        self.should_run = False
 
     def run(self):
         """Runs the thread
@@ -81,7 +85,7 @@ class WebSocketKeepAlive(threading.Thread):
         Args:
             None
         """
-        while True:
+        while self.should_run:
             try:
                 self.logger.debug('Sending heartbeat, seq ' + last_sequence)
                 self.ws.send(json.dumps({
@@ -100,8 +104,9 @@ class WebSocketRunForeverWrapper(threading.Thread):
     Runs the ``run_forever`` method of the websocket app.
     """
 
-    def __init__(self, ws: websocket.WebSocketApp) -> None:
+    def __init__(self, logger: logging.Logger, ws: websocket.WebSocketApp) -> None:
         super().__init__(name='Thread-ws_run_forever')
+        self.logger = logger
         self.ws = ws
 
     def run(self):
@@ -111,6 +116,7 @@ class WebSocketRunForeverWrapper(threading.Thread):
             None
         """
         self.ws.run_forever()
+        self.logger.warning('Websocket client run_forever exited')
 
 
 class Pycord:
@@ -122,7 +128,7 @@ class Pycord:
         connected: a bool value if the websocket connection is open
     """
 
-    url_base = 'https://discordapp.com/api/'
+    url_base = 'https://discordapp.com/api/v6/'
 
     def __init__(self, token: str, user_agent: str=None, logging_level: int=logging.DEBUG,
             log_to_console: bool=True, command_prefix: str='!') -> None:
@@ -302,6 +308,7 @@ class Pycord:
         """
         self.connected = False
         self.logger.error('Websocket closed')
+        self.disconnect_from_websocket()
 
     def _ws_on_open(self, ws: websocket.WebSocketApp):
         """Callback for sending the initial authentication data
@@ -350,6 +357,15 @@ class Pycord:
         Args:
             None
         """
+        try:
+            if hasattr(self, '_ws'):
+                self._ws.close()
+        except:
+            self.logger.debug('Couldn\'t terminate previous websocket connection')
+
+        # TODO remove
+        websocket.enableTrace(True)
+
         self._ws = websocket.WebSocketApp(
             self._get_websocket_address() + '?v=6&encoding=json',
             on_message=self._ws_on_message,
@@ -357,7 +373,7 @@ class Pycord:
             on_close=self._ws_on_close
         )
         self._ws.on_open = self._ws_on_open
-        self._ws_run_forever_wrapper = WebSocketRunForeverWrapper(self._ws)
+        self._ws_run_forever_wrapper = WebSocketRunForeverWrapper(self.logger, self._ws)
         self._ws_run_forever_wrapper.start()
 
     def keep_running(self):
@@ -372,6 +388,23 @@ class Pycord:
             None
         """
         self._ws_run_forever_wrapper.join()
+
+    def disconnect_from_websocket(self):
+        """Disconnects from the websocket
+
+        Args:
+            None
+        """
+        self.logger.info('Stopping keep alive thread')
+        self._ws_keep_alive.stop()
+        self._ws_keep_alive.join()
+        self.logger.info('Stopped keep alive thread')
+        try:
+            self.logger.warning('Disconnecting from websocket')
+            self._ws.close()
+            self.logger.info('Closed websocket connection')
+        except:
+            self.logger.debug('Couldn\'t terminate previous websocket connection')
 
     def set_status(self, name: str = None):
         """Updates the bot's status
@@ -388,16 +421,16 @@ class Pycord:
         if name:
             game = {
                 'name': name,
-                'type': 0,
+                'type': None,
                 'url': None
             }
         payload = {
             'op': WebSocketEvent.STATUS_UPDATE.value,
             'd': {
                 'game': game,
-                'status': 'online',
+                'status': None,
                 'afk': False,
-                'since': 0
+                'since': 0.0
             }
         }
         data = json.dumps(payload, indent=2)
