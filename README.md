@@ -62,6 +62,31 @@ def do_hello_command(data):
     pycord.send_message(data['channel_id'], 'Hello '+ data['author']['username'])
 ```
 
+## Callbacks
+
+In addition to registering commands, you can also register some methods to be called whenever specific events are dispatched to the client.
+
+These events can reached through adding entries in the `Pycord.callbacks` dictionary. The keys should be `PycordCallback` enums, and the values should be callables that take a single parameter.
+
+Example:
+
+```python
+from pycord import Pycord, PycordCallback
+
+
+def user_first_joins_server(data):
+    bot.send_message('some_channel_id', data['d']['user']['username'] + ' just joined for the first time!')
+
+
+cord = Pycord('my.bot.token')
+cord.callbacks = {
+    PycordCallback.USER_FIRST_TIME_JOIN: user_first_joins_server
+}
+cord.connect_to_websocket()
+cord.keep_running()
+
+```
+
 ## Adding your bot to your Discord server
 
 Per [the OAuth2 documentation](https://discordapp.com/developers/docs/topics/oauth2#adding-bots-to-guilds), you'll need to generate a link and then

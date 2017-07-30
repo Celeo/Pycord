@@ -57,6 +57,12 @@ class WebSocketEvent(enum.Enum):
         return None
 
 
+class PycordCallback(enum.Enum):
+
+    MESSAGE = 'MESSAGE_CREATE'
+    USER_FIRST_TIME_JOIN = 'GUILD_MEMBER_ADD'
+
+
 class WebSocketKeepAlive(threading.Thread):
     """Keep alive thread for sending websocket heartbeats
 
@@ -149,6 +155,16 @@ class Pycord:
             logging_level: the desired logging level for the internal logger
             log_to_console: whether or not to log to the console as well as the file
             command_prefix: the prefix to use when parsing commands (default is '!')
+
+        Attributes:
+            callbacks: a dictionary of callbacks to register. Keys should be ``PycordCallback``
+                enums, and values are a callable object that takes a single callabke parameter,
+                like command callback registrations. These callables will be called when the
+                corresponding event is sent to the server. Example:
+
+                cord.callbacks = {
+                    PycordCallback.USER_FIRST_TIME_JOIN = my_method_name
+                }
         """
         self.token = token
         self.user_agent = user_agent or f'Pycord (github.com/Celeo/Pycord, {__version__})'
@@ -156,6 +172,7 @@ class Pycord:
         self.connected = False
         self.command_prefix = command_prefix
         self._commands = []
+        self.callbacks = {}
 
     # =================================================
     # Private methods
@@ -286,7 +303,7 @@ class Pycord:
             self._ws_keep_alive.start()
         elif event == WebSocketEvent.DISPATCH:
             self.logger.debug('Got dispatch ' + data['t'])
-            if data['t'] == 'MESSAGE_CREATE':
+            if data['t'] == PycordCallback.MESSAGE.value:
                 message_content = data['d']['content']
                 if message_content.startswith(self.command_prefix) and self._commands:
                     cmd_str = message_content[1:].split(' ')[0].lower()
@@ -295,6 +312,9 @@ class Pycord:
                         if command_obj[0].lower() == cmd_str:
                             self.logger.debug(f'Found matching command "{command_obj[0]}", invoking callback')
                             command_obj[1](data)
+            for key in self.callbacks:
+                if key.value == data['t']:
+                    self.callbacks[key](data)
 
     def _ws_on_error(self, ws: websocket.WebSocketApp, error: Exception):
         """Callback for receiving errors from the websocket connection
